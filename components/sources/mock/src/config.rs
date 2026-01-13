@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// Mock source configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MockSourceConfig {
-    /// Type of data to generate: "counter", "sensor", or "generic"
+    /// Type of data to generate: "counter", "sensor", "sensor_live", or "generic"
     #[serde(default = "default_data_type")]
     pub data_type: String,
 
@@ -49,20 +49,20 @@ impl Default for MockSourceConfig {
 
 impl MockSourceConfig {
     /// Valid data types for mock source.
-    pub const VALID_DATA_TYPES: [&'static str; 3] = ["counter", "sensor", "generic"];
+    pub const VALID_DATA_TYPES: [&'static str; 4] = ["counter", "sensor", "sensor_live", "generic"];
 
     /// Validate the configuration and return an error if invalid.
     ///
     /// # Errors
     ///
     /// Returns an error if:
-    /// - Data type is not one of "counter", "sensor", or "generic"
+    /// - Data type is not one of "counter", "sensor", "sensor_live", or "generic"
     /// - Interval is 0 (would cause continuous generation without pause)
     pub fn validate(&self) -> anyhow::Result<()> {
         if !Self::VALID_DATA_TYPES.contains(&self.data_type.as_str()) {
             return Err(anyhow::anyhow!(
                 "Validation error: data_type '{}' is not valid. \
-                 Valid options are: counter, sensor, generic",
+                 Valid options are: counter, sensor, sensor_live, generic",
                 self.data_type
             ));
         }

@@ -164,6 +164,9 @@ impl Source for MockSource {
             let mut interval =
                 tokio::time::interval(tokio::time::Duration::from_millis(interval_ms));
             let mut seq = 0u64;
+            // Track which sensors have been created for sensor_live mode
+            let mut created_sensors: std::collections::HashSet<u32> =
+                std::collections::HashSet::new();
 
             loop {
                 interval.tick().await;
@@ -277,6 +280,80 @@ impl Source for MockSource {
                         };
 
                         SourceChange::Insert { element }
+                    }
+                    "sensor_live" => {
+                        // Sensor mode with stable element IDs - one node per sensor that gets updated.
+                        // Unlike "sensor" mode which creates new readings, this mode updates
+                        // existing sensor nodes, making it ideal for dashboards and demos
+                        // that show Drasi's reactive update capabilities.
+                        let sensor_id = rand::random::<u32>() % 5;
+                        let element_id = format!("sensor_{sensor_id}");
+                        let reference = ElementReference::new(&source_name, &element_id);
+
+                        let mut property_map = ElementPropertyMap::new();
+                        property_map.insert(
+                            "sensor_id",
+                            crate::conversion::json_to_element_value_or_default(
+                                &Value::String(format!("sensor_{sensor_id}")),
+                                drasi_core::models::ElementValue::Null,
+                            ),
+                        );
+                        property_map.insert(
+                            "temperature",
+                            crate::conversion::json_to_element_value_or_default(
+                                &Value::Number(
+                                    serde_json::Number::from_f64(
+                                        20.0 + rand::random::<f64>() * 10.0,
+                                    )
+                                    .unwrap_or(serde_json::Number::from(25)),
+                                ),
+                                drasi_core::models::ElementValue::Null,
+                            ),
+                        );
+                        property_map.insert(
+                            "humidity",
+                            crate::conversion::json_to_element_value_or_default(
+                                &Value::Number(
+                                    serde_json::Number::from_f64(
+                                        40.0 + rand::random::<f64>() * 20.0,
+                                    )
+                                    .unwrap_or(serde_json::Number::from(50)),
+                                ),
+                                drasi_core::models::ElementValue::Null,
+                            ),
+                        );
+                        property_map.insert(
+                            "timestamp",
+                            crate::conversion::json_to_element_value_or_default(
+                                &Value::String(chrono::Utc::now().to_rfc3339()),
+                                drasi_core::models::ElementValue::Null,
+                            ),
+                        );
+
+                        let metadata = ElementMetadata {
+                            reference,
+                            labels: Arc::from(vec![Arc::from("Sensor")]),
+                            effective_from: crate::time::get_system_time_millis().unwrap_or_else(
+                                |e| {
+                                    log::warn!("Failed to get timestamp for mock sensor_live: {e}");
+                                    chrono::Utc::now().timestamp_millis() as u64
+                                },
+                            ),
+                        };
+
+                        let element = Element::Node {
+                            metadata,
+                            properties: property_map,
+                        };
+
+                        // Use Insert for new sensors, Update for existing ones
+                        if created_sensors.insert(sensor_id) {
+                            // First time seeing this sensor - insert it
+                            SourceChange::Insert { element }
+                        } else {
+                            // Sensor already exists - update it
+                            SourceChange::Update { element }
+                        }
                     }
                     _ => {
                         // Generic data
